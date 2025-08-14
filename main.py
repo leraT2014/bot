@@ -1,9 +1,26 @@
 import  telebot
 from random import randint
 from datetime import datetime
+import requests
+import os
+import gdown
+from flask import Flask, request
 
-TOKEN = "8377845858:AAHItKyO15qthx55otMnWU53nFi40CVud6s"
+TOKEN = os.getenv("BOT_TOKEN")
 bot = telebot.TeleBot(TOKEN, parse_mode=None)
+
+app =Flask(__name__)
+
+@app.route('/')
+def index():
+    return "Bot is running"
+
+@app.route(f'/{token}', metthods=['POST'])
+def webhook():
+    json_str = request.get_data().decode('UTF-8')
+    update = telebot.types.Update.de_json(json_str)
+    bot.process_new_update([update])
+    return '', 200
 
 
 @bot.message_handler(commands=["start"])
@@ -130,4 +147,21 @@ def dice_answer(call):
 
 
 
-bot.polling(none_stop=True, interval=0)
+if __name__ == "__main__":
+    server_url = os.getenv("RENDER_EXTERNAL_URL")
+    if server_url and TOKEN:
+        webhook_url = f"{server_url}/{TOKEN}"
+        set_webhook_url = f"https://api.telegram.org/bot{TOKEN}/setWebhook?url={webhook_url}"
+        try:
+            r = requests.get(set_webhook_url)
+            print("Webhook установлен:", r.text)
+        except Exception as e:
+            print("Ошибка при установке webhook:", e)
+
+        port = int(os.environ.get("PORT", 10000))
+        print(f"Starting server on port {port}")
+        app.run(host='0.0.0.0', port=port)
+    else:
+        print("Запуск бота в режиме pooling")
+        bot.remove_webhook()
+        bot.polling(none_stop=True)
