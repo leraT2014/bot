@@ -15,7 +15,7 @@ app =Flask(__name__)
 def index():
     return "Bot is running"
 
-@app.route(f'/{token}', metthods=['POST'])
+@app.route(f'/{TOKEN}', metthods=['POST'])
 def webhook():
     json_str = request.get_data().decode('UTF-8')
     update = telebot.types.Update.de_json(json_str)
