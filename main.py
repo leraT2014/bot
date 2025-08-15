@@ -13,7 +13,7 @@ app =Flask(__name__)
 
 @app.route('/')
 def index():
-    return "Bot is running"
+    return "Бот запущен"
 
 @app.route(f'/{TOKEN}', methods=['POST'])
 def webhook():
