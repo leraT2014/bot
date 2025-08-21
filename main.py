@@ -1,9 +1,16 @@
-import  telebot
+import json
+import telebot
 from random import randint
 from datetime import datetime
+import time
+import random
+import telebot
 import requests
 import os
 import gdown
+import numpy as np
+from tensorflow.keras.models import load_model
+from PIL import Image, ImageOps
 from flask import Flask, request
 
 TOKEN = os.getenv("BOT_TOKEN")
@@ -22,7 +29,72 @@ def webhook():
     bot.process_new_updates([update])
     return '', 200
 
+def load_photo(message, name):
+    photo = message.photo[-1]
+    file_info = bot.get_file(photo.file_id)
+    downloaded_file = bot.download_file(file_info.file_path)
+    save_path = name
+    with open(save_path, 'wb') as new_file:
+        new_file.write(downloaded_file)
 
+history_file = "history.json"
+history = {}
+
+if os.path.exists(history_file):
+    try:
+        with open(history_file, "r", encoding='utf-8') as f:
+            history = json.load(f)
+    except Exception:
+        history = {}
+
+def save_history():
+    try:
+        with open(history_file, "w", encoding='utf-8') as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print("Ошибка сохранения истории: ", e)
+        
+def chat(user_id, text):
+    try:
+        if str(user_id) not in history:
+            history[str(user_id)] = [
+                {"role": "system", "content": "Ты — дружелюбный помощник."}
+            ]
+
+        history[str(user_id)].append({"role": "user", "content": text})
+
+        if len(history[str(user_id)]) > 16:
+            history[str(user_id)] = [history[str(user_id)][0]] + history[str(user_id)][-15:]
+
+        url = "https://api.intelligence.io.solutions/api/v1/chat/completions"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {os.getenv('API_KEY')}"
+        }
+        data = {
+            "model": "deepseek-ai/DeepSeek-R1-0528",
+            "messages": history[str(user_id)]
+        }
+
+        response = requests.post(url, headers=headers, json=data)
+        data = response.json()
+
+        if 'choices' in data and data['choices']:
+            content = data['choices'][0]['message']['content']
+            history[str(user_id)].append({"role": "assistant", "content": content})
+
+            if len(history[str(user_id)]) > 16:
+                history[str(user_id)] = [history[str(user_id)][0]] + history[str(user_id)][-15:]
+
+            save_history()
+
+            if '</think>' in content:
+                return content.split('</think>', 1)[1]
+            return content
+        else:
+            return f"Ошибка API: {data}"
+    except Exception as e:
+        return f"Ошибка при запросе: {e}"
 @bot.message_handler(commands=["start"])
 def send_welcome(message):
     try:
@@ -67,34 +139,7 @@ def send_image(message):
 def answer(message):
     try:
         text = message.text
-        if text == "Привет":
-            bot.send_message(message.chat.id, "Привет")
-        elif text == "Как дела":
-            bot.send_message(message.chat.id, "отлично,как у тебя")
-        elif text == "Норм":
-            bot.send_message(message.chat.id,"Класс")
-        elif text == "Как тебя зовут":
-            bot.send_message(message.chat.id, "Ботяро")
-        elif text == "Сколько тебе лет":
-            bot.send_message(message.chat.id, "Я виртуалиный у меня нет возраста")
-        elif text == "Раскажи шутку":
-            bot.send_message(message.chat.id, "малыш в зоопарке говорит маме: -Мама, смотри обезьянка в очках! -тихо это кассир.")
-        elif text == "Хочу еще шутку":
-            bot.send_message(message.chat.id, "-ты где? -в аду - как из школы выйдешь позвони")
-        elif text == "Хочешь прикол":
-            bot.send_message(message.chat.id, "нет давай я")
-        elif text == "Нет я":
-            bot.send_message(message.chat.id, "нет давай я")
-        elif text == "Нет":
-            bot.send_message(message.chat.id, "да")
-        elif text == "Ладно ты":
-            bot.send_message(message.chat.id, "без паники ты не старенький")
-        elif text == "ХАХА круто":
-            bot.send_message(message.chat.id, "ага")
-
-
-        elif text == "Отгадай число":
-
+        if text == "Отгадай число":
             keyboard3 = telebot.types.InlineKeyboardMarkup(row_width=3)
             butoton1 = telebot.types.InlineKeyboardButton("1", callback_data="1")
             butoton2 = telebot.types.InlineKeyboardButton("2", callback_data="2")
@@ -124,7 +169,10 @@ def answer(message):
             keyboard2.add(butoton1, butoton2, butoton3, butoton4, butoton5, butoton6)
             bot.send_message(message.chat.id, "Угадай число на кубике", reply_markup=keyboard2)
         else:
-            bot.send_message(message.chat.id, text)
+            bot.send_message(message.chat.id, "Думаю над ответом...")
+            answer = chat(message.chat.id, message.text)
+            bot.send_message(message.chat.id, answer, parse_mode='Markdown')
+            bot.delete_message(message.chat.id, message.id+1)
     except Exception as e:
         bot.send_message(message.chat.id, f"Ошибка: {e}")
 
