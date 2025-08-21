@@ -21,13 +21,25 @@ app =Flask(__name__)
 @app.route('/')
 def index():
     return "Бот запущен"
-
+    
 @app.route(f'/{TOKEN}', methods=['POST'])
 def webhook():
     json_str = request.get_data().decode('UTF-8')
     update = telebot.types.Update.de_json(json_str)
     bot.process_new_updates([update])
     return '', 200
+
+def escape_markdown(text: str) -> str:
+    escape_chars = r'[_*[\]()~`>#+\-=|{}.!]'
+    return re.sub(f'({escape_chars})', r'\\\1', text)
+
+MAX_LEN = 4096
+
+def send_long_message(chat_id, text, parse_mode="MarkdownV2"):
+    safe_text = escape_markdown(text)
+    for i in range(0, len(safe_text), MAX_LEN):
+        bot.send_message(chat_id, safe_text[i:i+MAX_LEN], parse_mode=parse_mode)
+    
 
 def load_photo(message, name):
     photo = message.photo[-1]
@@ -171,7 +183,7 @@ def answer(message):
         else:
             bot.send_message(message.chat.id, "Думаю над ответом...")
             answer = chat(message.chat.id, message.text)
-            bot.send_message(message.chat.id, answer, parse_mode='Markdown')
+            send_long_message(message.chat.id, answer, parse_mode="MarkdownV2")
             bot.delete_message(message.chat.id, message.id+1)
     except Exception as e:
         bot.send_message(message.chat.id, f"Ошибка: {e}")
